@@ -28,13 +28,13 @@ class _SplashScreenState extends State<SplashScreen> {
       // User is signed in - navigate to HomeScreen
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
+        MaterialPageRoute(builder: (context) => HomeScreen()), // Removed `const`
       );
     } else {
       // No user signed in - navigate to WelcomeScreen
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const WelcomeScreen()),
+        MaterialPageRoute(builder: (context) => WelcomeScreen()), // Removed `const`
       );
     }
   }

@@ -59,7 +59,6 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
 
         if (docSnap.exists) {
           final data = docSnap.data();
-          print('Fetched fullName: ${data?['fullName']}');
           setState(() {
             _userName = data?['fullName'] ?? 'No Full Name Found';
           });
@@ -112,7 +111,6 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
       );
     }
   }
-
 
 
   void _showComingSoonMessage(BuildContext context) {
@@ -198,6 +196,7 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
         centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 1,
+        foregroundColor: Colors.black,
       ),
       body: currentUser == null
           ? Center(child: Text("You are not logged in"))
@@ -205,19 +204,32 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
         child: Column(
           children: [
             SizedBox(height: 20),
-            CircleAvatar(
-              radius: 50,
-              backgroundImage: NetworkImage(currentUser.photoURL ??
-                  'https://images.unsplash.com/photo-1525069011944-e7adfe78b280?w=800&h=800'),
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blueAccent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  CircleAvatar(
+                    radius: 50,
+                    backgroundImage: NetworkImage(currentUser.photoURL ??
+                        'https://images.unsplash.com/photo-1525069011944-e7adfe78b280?w=800&h=800'),
+                  ),
+                  SizedBox(height: 10),
+                  Text(
+                    _userName,
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  Text('Total Posts: ${_userPosts.length}', style: TextStyle(color: Colors.white70)),
+                ],
+              ),
             ),
-            SizedBox(height: 10),
-            Text(
-              _userName,
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            Text('Total Posts: ${_userPosts.length}', style: TextStyle(color: Colors.grey)),
             SizedBox(height: 20),
-            GridView.builder(
+            _userPosts.isEmpty
+                ? Center(child: Text('No posts available'))
+                : GridView.builder(
               shrinkWrap: true,
               physics: NeverScrollableScrollPhysics(),
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(

@@ -15,7 +15,7 @@ class LocationSelectionScreen extends StatefulWidget {
 
 class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
   late GoogleMapController _mapController;
-  LatLng? _selectedLocation = const LatLng(33.7828, 72.3548); // Default location
+  LatLng? _selectedLocation = const LatLng(33.7828, 72.3548); // University of Education Attock campus location
 
   @override
   Widget build(BuildContext context) {
@@ -33,9 +33,9 @@ class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
       ),
       body: GoogleMap(
         onMapCreated: (controller) => _mapController = controller,
-        initialCameraPosition: const CameraPosition(
-          target: LatLng(12.9716, 77.5946), // Default location
-          zoom: 12,
+        initialCameraPosition: CameraPosition(
+          target: const LatLng(33.7828, 72.3548), // University of Education Attock campus
+          zoom: 15, // Adjust zoom level for a better view
         ),
         onTap: (latLng) {
           setState(() {
@@ -47,9 +47,16 @@ class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
           Marker(
             markerId: const MarkerId('selectedLocation'),
             position: _selectedLocation!,
-          )
+            infoWindow: const InfoWindow(title: 'University of Education Attock'),
+          ),
         }
-            : const <Marker>{},
+            : {
+          Marker(
+            markerId: const MarkerId('universityLocation'),
+            position: const LatLng(33.7828, 72.3548),
+            infoWindow: const InfoWindow(title: 'University of Education Attock'),
+          ),
+        },
       ),
     );
   }

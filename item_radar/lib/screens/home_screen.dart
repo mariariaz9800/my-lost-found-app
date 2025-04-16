@@ -53,9 +53,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> fetchInitialPosts() async {
     setState(() => isLoading = true);
+
     try {
       final postsSnapshot = await FirebaseFirestore.instance.collection('posts').get();
-
       List<Map<String, dynamic>> items = [];
 
       for (var doc in postsSnapshot.docs) {
@@ -64,11 +64,11 @@ class _HomeScreenState extends State<HomeScreen> {
         if (data.isEmpty) continue;
 
         final uid = data['uid'] ?? '';
-
         String userNameOrEmail = 'Unknown User';
+
         try {
           if (uid.isNotEmpty) {
-            DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+            final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
             if (userDoc.exists) {
               userNameOrEmail = userDoc.get('name') ?? userDoc.get('email') ?? 'Unknown User';
             }
@@ -83,16 +83,33 @@ class _HomeScreenState extends State<HomeScreen> {
         final formattedDate = dateTimestamp != null
             ? dateTimestamp.toDate().toString().split(' ')[0]
             : 'No Date';
+
         final formattedTime = timeTimestamp != null
             ? TimeOfDay.fromDateTime(timeTimestamp.toDate()).format(context)
             : 'No Time';
 
-        final buttonText = data['buttonText'] ?? '';
-        final buttonColor = buttonText == 'Found'
-            ? Colors.green
-            : (buttonText == 'Lost' ? Colors.red : Colors.grey);
+        final String rawPostType = (data['type'] ?? '').toString().toLowerCase();
+
+        String buttonText = '';
+        if (rawPostType == 'found') {
+          buttonText = 'Found';
+        } else if (rawPostType == 'lost') {
+          buttonText = 'Lost';
+        } else {
+          // fallback to category if type is missing or invalid
+          buttonText = (data['category']?.toString().toLowerCase().contains('found') ?? false)
+              ? 'Found'
+              : 'Lost';
+        }
+
+        final Color buttonColor = buttonText == 'Found' ? Colors.green : Colors.red;
+
+        // Handle latitude and longitude safely
+        final latitude = data['latitude'];
+        final longitude = data['longitude'];
 
         items.add({
+          'id': doc.id,
           'title': data['title'] ?? 'No Title',
           'category': data['category'] ?? 'Unknown',
           'date': formattedDate,
@@ -101,16 +118,18 @@ class _HomeScreenState extends State<HomeScreen> {
           'description': data['description'] ?? '',
           'images': List<String>.from(data['images'] ?? []),
           'buttonColor': buttonColor,
-          'buttonText': buttonText.isNotEmpty ? buttonText : 'Unknown',
+          'buttonText': buttonText,
           'phoneNumber': data['phoneNumber'] ?? '',
           'uid': uid,
           'userName': userNameOrEmail,
+          'latitude': latitude,
+          'longitude': longitude,
         });
       }
 
       setState(() {
         allItems = items;
-        displayedItems = getFilteredItems(); // Apply filters right away
+        displayedItems = getFilteredItems();
         isLoading = false;
       });
     } catch (e) {
@@ -124,13 +143,10 @@ class _HomeScreenState extends State<HomeScreen> {
     } else {
       return FirebaseFirestore.instance
           .collection('posts')
-          .where('postType', isEqualTo: selectedCategory)
+          .where('type', isEqualTo: selectedCategory.toLowerCase()) // Use `type`
           .snapshots();
     }
   }
-
-
-
 
   List<Map<String, dynamic>> getFilteredItems() {
     List<Map<String, dynamic>> filteredItems = allItems;
@@ -360,73 +376,91 @@ class _HomeScreenState extends State<HomeScreen> {
               itemCount: filteredItems.length,
               itemBuilder: (context, index) {
                 final data = filteredItems[index];
-                final postType = data['postType'] ?? 'Unknown';
+                final postType = data['buttonText'];
+                final imageUrl = data['images'].isNotEmpty ? data['images'][0] : null;
 
-                return Card(
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16)),
-                  elevation: 4,
-                  margin: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (data['imageUrl'] != null)
-                        ClipRRect(
-                          borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(16)),
-                          child: Image.network(
-                            data['imageUrl'],
-                            height: 200,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              data['itemName'] ?? 'Item Name',
-                              style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              data['description'] ??
-                                  'No description provided',
-                              style: TextStyle(color: Colors.grey[700]),
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Chip(
-                                  label: Text(postType),
-                                  backgroundColor: postType == 'Lost'
-                                      ? Colors.redAccent
-                                      : Colors.green,
-                                  labelStyle:
-                                  const TextStyle(color: Colors.white),
-                                ),
-                                const Spacer(),
-                                Text(
-                                  '📍 ${data['location'] ?? "Unknown"}',
-                                  style: TextStyle(
-                                      color: Colors.grey[600]),
-                                ),
-                              ],
-                            ),
-                          ],
+                return GestureDetector(
+                  onTap: () {
+                    // Navigate to DetailScreen with the post data
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => DetailScreen(
+                          title: data['title'],
+                          category: data['category'],
+                          location: data['location'],
+                          time: data['time'],
+                          date: data['date'],
+                          description: data['description'],
+                          imagePath: imageUrl ?? '',
+                          buttonColor: data['buttonColor'],
+                          phoneNumber: data['phoneNumber'],
+                          buttonText: data['buttonText'],
                         ),
                       ),
-                    ],
+                    );
+                  },
+                  child: Card(
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
+                    elevation: 4,
+                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (imageUrl != null)
+                          ClipRRect(
+                            borderRadius:
+                            const BorderRadius.vertical(top: Radius.circular(16)),
+                            child: Image.network(
+                              imageUrl,
+                              height: 200,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                data['title'] ?? 'Item Name',
+                                style: const TextStyle(
+                                    fontSize: 20, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                data['description'] ?? 'No description provided',
+                                style: TextStyle(color: Colors.grey[700]),
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Chip(
+                                    label: Text(postType),
+                                    backgroundColor: postType == 'Lost'
+                                        ? Colors.redAccent
+                                        : Colors.green,
+                                    labelStyle: const TextStyle(color: Colors.white),
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    '📍 ${data['location'] ?? "Unknown"}',
+                                    style: TextStyle(color: Colors.grey[600]),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 );
               },
             ),
-          ),
+          )
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -469,8 +503,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
-
-class DetailScreen extends StatefulWidget {
+class DetailScreen extends StatelessWidget {
   final String title;
   final String category;
   final String location;
@@ -497,39 +530,17 @@ class DetailScreen extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _DetailScreenState createState() => _DetailScreenState();
-}
-
-class _DetailScreenState extends State<DetailScreen> {
-  late GoogleMapController mapController;
-  late LatLng _center;
-
-  @override
-  void initState() {
-    super.initState();
-    // Initialize the location, parsing the latitude and longitude from the string
-    final locationParts = widget.location.split(', ');
-    if (locationParts.length == 2) {
-      double lat = double.tryParse(locationParts[0]) ?? 0.0;
-      double lng = double.tryParse(locationParts[1]) ?? 0.0;
-      _center = LatLng(lat, lng);
-    } else {
-      _center = LatLng(0.0, 0.0); // Fallback in case the location format is incorrect
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.title),
-        backgroundColor: widget.buttonColor,
+        title: Text(title),
+        backgroundColor: buttonColor,
       ),
       body: ListView(
         children: [
           // Image Section
           Image.network(
-            widget.imagePath,
+            imagePath,
             height: 250,
             width: double.infinity,
             fit: BoxFit.cover,
@@ -545,42 +556,45 @@ class _DetailScreenState extends State<DetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(widget.title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                Text(title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
-                Text(widget.category, style: const TextStyle(color: Colors.grey)),
+                Text(category, style: const TextStyle(color: Colors.grey)),
                 const SizedBox(height: 8),
-                Text('Date: ${widget.date} | Time: ${widget.time}', style: const TextStyle(color: Colors.grey)),
+                Text('Date: $date | Time: $time', style: const TextStyle(color: Colors.grey)),
                 const SizedBox(height: 16),
-                Text(widget.description),
+                Text(description),
                 const SizedBox(height: 16),
                 // Google Map
                 SizedBox(
                   height: 200,
                   child: GoogleMap(
-                    onMapCreated: (controller) {
-                      mapController = controller;
-                    },
                     initialCameraPosition: CameraPosition(
-                      target: _center,
+                      target: LatLng(
+                        double.tryParse(location.split(',')[0]) ?? 0.0,
+                        double.tryParse(location.split(',')[1]) ?? 0.0,
+                      ),
                       zoom: 15.0,
                     ),
                     markers: {
                       Marker(
-                        markerId: MarkerId(widget.title),
-                        position: _center,
-                        infoWindow: InfoWindow(title: widget.title),
+                        markerId: MarkerId(title),
+                        position: LatLng(
+                          double.tryParse(location.split(',')[0]) ?? 0.0,
+                          double.tryParse(location.split(',')[1]) ?? 0.0,
+                        ),
+                        infoWindow: InfoWindow(title: title),
                       ),
                     },
                   ),
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: widget.buttonColor),
+                  style: ElevatedButton.styleFrom(backgroundColor: buttonColor),
                   onPressed: () {
                     // Implement contact action (e.g., calling the phone number)
-                    _launchCall(widget.phoneNumber);
+                    _launchCall(phoneNumber);
                   },
-                  child: Text(widget.buttonText),
+                  child: Text(buttonText),
                 ),
               ],
             ),
@@ -592,7 +606,6 @@ class _DetailScreenState extends State<DetailScreen> {
 
   // Helper method to launch the phone dialer
   void _launchCall(String phoneNumber) {
-    // Use url_launcher or any other method to initiate the phone call
-    print("Dialing $phoneNumber");
+    launch('tel://$phoneNumber');
   }
 }

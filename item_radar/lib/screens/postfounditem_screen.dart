@@ -1,13 +1,9 @@
-import 'dart:io';
-
-import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-
-import 'location_selection_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:item_radar/screens/location_selection_screen.dart';
 
 class PostFoundItemScreen extends StatefulWidget {
   const PostFoundItemScreen({super.key});
@@ -18,144 +14,118 @@ class PostFoundItemScreen extends StatefulWidget {
 
 class _PostFoundItemScreenState extends State<PostFoundItemScreen> {
   final _formKey = GlobalKey<FormState>();
-
-  late final TextEditingController _itemNameController;
-  late final TextEditingController _locationController;
-  late final TextEditingController _timeController;
-  late final TextEditingController _dateController;
-  late final TextEditingController _descriptionController;
-
-  String? _selectedCategory;
+  String _itemName = '';
+  String _category = '';
+  String _location = '';
+  String _description = '';
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
-  File? _pickedImage;
-  LatLng? _selectedLocation;
 
-  @override
-  void initState() {
-    super.initState();
-    _itemNameController = TextEditingController();
-    _locationController = TextEditingController();
-    _timeController = TextEditingController();
-    _dateController = TextEditingController();
-    _descriptionController = TextEditingController();
-  }
+  final List<String> _categories = [
+    'Electronics',
+    'Clothing',
+    'Books',
+    'Accessories',
+    'Others'
+  ];
 
-  @override
-  void dispose() {
-    _itemNameController.dispose();
-    _locationController.dispose();
-    _timeController.dispose();
-    _dateController.dispose();
-    _descriptionController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _selectDate(BuildContext context) async {
+  Future<void> _selectDate() async {
+    final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
+      initialDate: now,
+      firstDate: DateTime(now.year - 1),
+      lastDate: now,
     );
     if (picked != null) {
-      setState(() {
-        _selectedDate = picked;
-        _dateController.text = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-      });
+      setState(() => _selectedDate = picked);
     }
   }
 
-  Future<void> _selectTime(BuildContext context) async {
+  Future<void> _selectTime() async {
     final picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
     );
     if (picked != null) {
-      setState(() {
-        _selectedTime = picked;
-        _timeController.text = '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
-      });
-    }
-  }
-
-  Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final XFile? image = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 800,
-      maxHeight: 800,
-    );
-
-    if (image != null) {
-      setState(() {
-        _pickedImage = File(image.path);
-      });
+      setState(() => _selectedTime = picked);
     }
   }
 
   Future<void> _selectLocation() async {
-    final result = await Navigator.push(
+    final result = await Navigator.push<LatLng>(
       context,
       MaterialPageRoute(
-        builder: (context) => LocationSelectionScreen(
-          onLocationSelected: (location) {
-            Navigator.pop(context, location);
+        builder: (_) => LocationSelectionScreen(
+          onLocationSelected: (LatLng selectedLocation) {
+            Navigator.pop(context, selectedLocation);
           },
         ),
       ),
     );
 
-    if (result != null && result is LatLng) {
+    if (result != null) {
       setState(() {
-        _selectedLocation = result;
-        _locationController.text = '${result.latitude}, ${result.longitude}';
+        _location = '${result.latitude}, ${result.longitude}';
       });
     }
   }
 
   Future<void> _postItem() async {
-    if (_selectedCategory == null ||
-        _pickedImage == null ||
-        _selectedLocation == null ||
-        _selectedDate == null ||
-        _selectedTime == null ||
-        !_formKey.currentState!.validate()) {
+    final isValid = _formKey.currentState!.validate();
+    if (!isValid) return;
+
+    if (_selectedDate == null || _selectedTime == null || _category.isEmpty || _location.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all required fields')),
+        const SnackBar(content: Text('Please fill all required fields.')),
       );
       return;
     }
 
+    _formKey.currentState!.save();
+
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      final fileName = DateTime.now().millisecondsSinceEpoch.toString();
-      final ref = FirebaseStorage.instance.ref().child('post_images').child(fileName);
-      await ref.putFile(_pickedImage!);
-      final imageUrl = await ref.getDownloadURL();
-
-      await FirebaseFirestore.instance.collection('posts').add({
-        'uid': user?.uid,
-        'itemName': _itemNameController.text.trim(),
-        'category': _selectedCategory,
-        'description': _descriptionController.text.trim(),
-        'location': '${_selectedLocation!.latitude}, ${_selectedLocation!.longitude}',
-        'date': _dateController.text,
-        'time': _timeController.text,
-        'imageUrl': imageUrl,
-        'postType': 'Found',
-        'timestamp': FieldValue.serverTimestamp(),
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Post submitted successfully')),
+      final user = FirebaseAuth.instance.currentUser!;
+      final timestamp = DateTime(
+        _selectedDate!.year,
+        _selectedDate!.month,
+        _selectedDate!.day,
+        _selectedTime!.hour,
+        _selectedTime!.minute,
       );
 
-      Navigator.pop(context);
-    } catch (e) {
-      print('Error posting item: $e');
+      final postData = {
+        'type': 'Found',
+        'itemName': _itemName,
+        'category': _category,
+        'location': _location,
+        'description': _description,
+        'timestamp': timestamp,
+        'imageUrl': '', // You can add image URL if needed
+        'createdAt': FieldValue.serverTimestamp(),
+        'userId': user.uid,
+      };
+
+      print('📤 Posting item to Firestore...');
+
+      // Save to global foundItems collection
+      await FirebaseFirestore.instance.collection('foundItems').add(postData);
+
+      // Also save to user's userPosts subcollection
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('userPosts')
+          .add(postData);
+
+      print('✅ Post successfully added to Firestore!');
+      if (mounted) Navigator.of(context).pop();
+    } catch (e, stackTrace) {
+      print('❌ Exception while posting item: $e');
+      print('🪵 Stack trace:\n$stackTrace');
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to submit post')),
+        SnackBar(content: Text('Failed to post item. Error: $e')),
       );
     }
   }
@@ -163,165 +133,69 @@ class _PostFoundItemScreenState extends State<PostFoundItemScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Post Found Item'),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
+      appBar: AppBar(title: const Text('Post Found Item')),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Category*',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8.0,
-                  children: ['Electronics', 'Clothing', 'Documents', 'Accessories', 'Other']
-                      .map((category) => ChoiceChip(
-                    label: Text(category),
-                    selected: _selectedCategory == category,
-                    onSelected: (selected) {
-                      setState(() {
-                        _selectedCategory = category;
-                      });
-                    },
-                  ))
-                      .toList(),
-                ),
-                const SizedBox(height: 16),
-
                 TextFormField(
-                  controller: _itemNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Item Name*',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) =>
-                  value == null || value.isEmpty ? 'Please enter the item name' : null,
+                  decoration: const InputDecoration(labelText: 'Item Name'),
+                  validator: (value) => value!.isEmpty ? 'Enter item name' : null,
+                  onSaved: (value) => _itemName = value!,
                 ),
-                const SizedBox(height: 16),
-
-                GestureDetector(
-                  onTap: _selectLocation,
-                  child: AbsorbPointer(
-                    child: TextFormField(
-                      controller: _locationController,
-                      decoration: const InputDecoration(
-                        labelText: 'Location*',
-                        border: OutlineInputBorder(),
-                        suffixIcon: Icon(Icons.location_on),
-                      ),
-                      validator: (value) =>
-                      value == null || value.isEmpty ? 'Please select a location' : null,
-                    ),
-                  ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(labelText: 'Category'),
+                  items: _categories.map((cat) {
+                    return DropdownMenuItem(value: cat, child: Text(cat));
+                  }).toList(),
+                  onChanged: (val) => setState(() => _category = val!),
+                  validator: (value) => value == null || value.isEmpty ? 'Select category' : null,
                 ),
-                const SizedBox(height: 16),
-
+                const SizedBox(height: 10),
                 Row(
                   children: [
                     Expanded(
-                      child: TextFormField(
-                        controller: _timeController,
-                        readOnly: true,
-                        onTap: () => _selectTime(context),
-                        decoration: const InputDecoration(
-                          labelText: 'Time*',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) =>
-                        value == null || value.isEmpty ? 'Please select a time' : null,
+                      child: ElevatedButton.icon(
+                        onPressed: _selectDate,
+                        icon: const Icon(Icons.date_range),
+                        label: Text(_selectedDate == null
+                            ? 'Select Date'
+                            : DateFormat.yMMMd().format(_selectedDate!)),
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 10),
                     Expanded(
-                      child: TextFormField(
-                        controller: _dateController,
-                        readOnly: true,
-                        onTap: () => _selectDate(context),
-                        decoration: const InputDecoration(
-                          labelText: 'Date*',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) =>
-                        value == null || value.isEmpty ? 'Please select a date' : null,
+                      child: ElevatedButton.icon(
+                        onPressed: _selectTime,
+                        icon: const Icon(Icons.access_time),
+                        label: Text(_selectedTime == null
+                            ? 'Select Time'
+                            : _selectedTime!.format(context)),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.camera_alt),
-                    label: const Text('Select Image*'),
-                    onPressed: _pickImage,
-                  ),
+                const SizedBox(height: 10),
+                ElevatedButton.icon(
+                  onPressed: _selectLocation,
+                  icon: const Icon(Icons.location_on),
+                  label: Text(_location.isEmpty ? 'Select Location' : _location),
                 ),
-                const SizedBox(height: 8),
-                if (_pickedImage != null)
-                  Center(
-                    child: Container(
-                      height: 200,
-                      width: 200,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Image.file(
-                        _pickedImage!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                        const Center(child: Icon(Icons.error)),
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 16),
-
+                const SizedBox(height: 10),
                 TextFormField(
-                  controller: _descriptionController,
+                  decoration: const InputDecoration(labelText: 'Description'),
                   maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Description*',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) =>
-                  value == null || value.isEmpty ? 'Please enter a description' : null,
+                  validator: (value) => value!.isEmpty ? 'Enter description' : null,
+                  onSaved: (value) => _description = value!,
                 ),
-                const SizedBox(height: 24),
-
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: _postItem,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueAccent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: const Text(
-                      'Post',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: _postItem,
+                  child: const Text('Post Item'),
                 ),
               ],
             ),

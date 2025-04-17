@@ -68,12 +68,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
       final password = _passwordController.text;
 
       try {
+        // Create user in Firebase Auth
         UserCredential userCredential = await FirebaseAuth.instance
             .createUserWithEmailAndPassword(email: email, password: password);
 
         final uid = userCredential.user!.uid;
 
-        // Initialize userData map
+        // Base user data
         Map<String, dynamic> userData = {
           'uid': uid,
           'full_name': _fullNameController.text.trim(),
@@ -83,30 +84,32 @@ class _SignUpScreenState extends State<SignUpScreen> {
               : selectedCategory == 1
               ? 'Teacher'
               : 'Other',
+          'profile_picture': '', // Optional default profile picture
           'created_at': FieldValue.serverTimestamp(),
         };
 
-        // Add additional data based on category
-        if (selectedCategory == 0) {
-          userData.addAll({
-            'reg_no': _regNoController.text.trim(),
-            'mobile': _mobileController.text.trim(),
-          });
-        } else if (selectedCategory == 1) {
-          userData.addAll({
-            'username': _usernameController.text.trim(),
-          });
-        } else if (selectedCategory == 2) {
-          userData.addAll({
-            'mobile': _mobileController.text.trim(),
-          });
+        // Add category-specific data
+        switch (selectedCategory) {
+          case 0: // Student
+            userData.addAll({
+              'reg_no': _regNoController.text.trim(),
+              'mobile': _mobileController.text.trim(),
+            });
+            break;
+          case 1: // Teacher
+            userData.addAll({
+              'username': _usernameController.text.trim(),
+            });
+            break;
+          case 2: // Other
+            userData.addAll({
+              'mobile': _mobileController.text.trim(),
+            });
+            break;
         }
 
-        // Add user data to Firestore
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .set(userData);
+        // Save to Firestore
+        await FirebaseFirestore.instance.collection('users').doc(uid).set(userData);
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -115,6 +118,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
           ),
         );
 
+        // Navigate to Home screen
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => HomeScreen()),
@@ -143,6 +147,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       }
     }
   }
+
 
   @override
   Widget build(BuildContext context) {

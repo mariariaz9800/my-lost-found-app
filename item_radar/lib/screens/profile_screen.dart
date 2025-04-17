@@ -47,21 +47,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadUserData() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-        if (doc.exists) {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user != null) {
+      try {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+
+        if (userDoc.exists) {
           setState(() {
-            userData = doc.data();
+            userData = userDoc.data();
             isLoading = false;
           });
+          print("📌 Loaded User Data: ${userData.toString()}"); // 🔍 Debug log
+        } else {
+          setState(() {
+            isLoading = false;
+            userData = {}; // fallback to empty to prevent null
+          });
+          print("⚠️ User document not found for UID: ${user.uid}");
         }
+      } catch (e) {
+        print("🔥 Error loading user data: $e");
+        setState(() {
+          isLoading = false;
+          userData = {};
+        });
       }
-    } catch (e) {
-      print("🔥 Failed to load user data: $e");
+    } else {
+      print("⚠️ No authenticated user found.");
     }
   }
+
+
 
   void _onItemTapped(int index) {
     setState(() => _selectedIndex = index);
@@ -274,28 +294,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     CircleAvatar(
                       radius: 50,
                       backgroundImage: NetworkImage(
-                        userData?['profilePicture'] ?? 'https://images.unsplash.com/photo-1525069011944-e7adfe78b280?w=800&h=800', // Default image
+                        userData?['profilePicture'] ??
+                            'https://images.unsplash.com/photo-1525069011944-e7adfe78b280?w=800&h=800',
                       ),
                     ),
                     const SizedBox(height: 10),
-                    // Display User Info
+                    // Display User Info or Loading/Error State
                     if (isLoading)
                       const CircularProgressIndicator()
-                    else ...[
-                      Text(
-                        userData?['fullName'] ?? 'Unknown User',
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                      ),
-                      Text(
-                        '@${userData?['registrationNumber'] ?? 'username'}',
-                        style: const TextStyle(color: Colors.grey),
-                      ),
-                    ]
+                    else if (userData != null && userData!.isNotEmpty)
+                      Column(
+                        children: [
+                          Text(
+                            userData?['full_name'] ?? 'No Name Provided',
+                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            '@${userData?['registrationNumber'] ?? 'username'}',
+                            style: const TextStyle(color: Colors.grey),
+                          ),
+                        ],
+                      )
+                    else
+                      const Text('User data not found'),
                   ],
                 ),
               ),
               const SizedBox(height: 20),
-              // Profile options
+              // Profile Options Container
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 20),
                 padding: const EdgeInsets.all(16),
@@ -303,39 +329,66 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: const [
-                    BoxShadow(color: Colors.black12, blurRadius: 6, spreadRadius: 1),
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 6,
+                      spreadRadius: 1,
+                    ),
                   ],
                 ),
                 child: Column(
                   children: [
-                    // Edit Profile option
+                    // Edit Profile
                     _buildProfileOption(Icons.edit, 'Edit Profile', () async {
                       final result = await Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const EditProfileScreen(),
+                        ),
                       );
                       if (result == true) {
-                        _loadUserData(); // Reload user data if profile was updated
+                        _loadUserData(); // Reload if updated
                       }
                     }),
-                    // Notifications toggle
+                    // Notifications Toggle
                     SwitchListTile(
                       title: const Text('Notifications'),
                       value: _notificationsEnabled,
-                      onChanged: (newValue) => setState(() => _notificationsEnabled = newValue),
+                      onChanged: (newValue) =>
+                          setState(() => _notificationsEnabled = newValue),
                     ),
-                    // Delete Account option
-                    _buildProfileOption(Icons.delete, 'Delete Account', _showDeleteAccountDialog, Colors.red),
-                    // Report a Problem option
+                    // Delete Account
+                    _buildProfileOption(
+                      Icons.delete,
+                      'Delete Account',
+                      _showDeleteAccountDialog,
+                      Colors.red,
+                    ),
+                    // Report Problem
                     _buildProfileOption(Icons.report, 'Report a Problem', () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const ReportProblemScreen()));
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ReportProblemScreen(),
+                        ),
+                      );
                     }),
-                    // Share App option
+                    // Share App
                     _buildProfileOption(Icons.share, 'Share App', () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => ShareAppScreen()));
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ShareAppScreen(),
+                        ),
+                      );
                     }),
-                    // Logout option
-                    _buildProfileOption(Icons.logout, 'Logout', _showLogoutDialog, Colors.red),
+                    // Logout
+                    _buildProfileOption(
+                      Icons.logout,
+                      'Logout',
+                      _showLogoutDialog,
+                      Colors.red,
+                    ),
                   ],
                 ),
               ),
@@ -345,7 +398,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 4, // Make sure this index corresponds to the Profile tab
+        currentIndex: 4,
         onTap: _onItemTapped,
         selectedItemColor: Colors.blueAccent,
         unselectedItemColor: Colors.black54,
@@ -353,13 +406,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.article), label: 'My Posts'),
-          BottomNavigationBarItem(icon: Icon(Icons.add_circle_outline), label: 'Add Post'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.add_circle_outline), label: 'Add Post'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
     );
   }
+
 
   Widget _buildProfileOption(IconData icon, String text, VoidCallback? onTap, [Color? color]) {
     return ListTile(

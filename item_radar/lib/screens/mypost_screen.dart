@@ -60,7 +60,7 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
         if (docSnap.exists) {
           final data = docSnap.data();
           setState(() {
-            _userName = data?['fullName'] ?? 'No Full Name Found';
+            _userName = data?['full_name'] ?? 'No Full Name Found';
           });
         } else {
           setState(() {
@@ -114,11 +114,17 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
 
 
   void _showComingSoonMessage(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Chat feature will be available in future updates!'),
-        backgroundColor: Colors.red,
-        duration: Duration(seconds: 2),
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Coming Soon!'),
+        content: const Text('This feature will be available soon. Stay tuned!'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Okay'),
+          ),
+        ],
       ),
     );
   }
@@ -232,34 +238,96 @@ class _MyPostsScreenState extends State<MyPostsScreen> {
                 : GridView.builder(
               shrinkWrap: true,
               physics: NeverScrollableScrollPhysics(),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
                 crossAxisSpacing: 16,
                 mainAxisSpacing: 16,
-                childAspectRatio: 1,
+                childAspectRatio: 0.85,
               ),
               itemCount: _userPosts.length,
               itemBuilder: (context, index) {
-                final post = _userPosts[index].data() as Map<String, dynamic>;
+                final postData = _userPosts[index].data() as Map<String, dynamic>;
+                final imageUrl = postData['imageUrl'] ?? '';
+                final title = postData['itemName'] ?? 'Untitled';
+                final category = postData['category'] ?? 'Unknown';
+
                 return GestureDetector(
                   onTap: () => _navigateToDetailScreen(context, _userPosts[index]),
                   child: Container(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 4,
-                          offset: Offset(0, 2),
-                        )
+                          color: Colors.black26,
+                          blurRadius: 6,
+                          offset: Offset(0, 4),
+                        ),
                       ],
                     ),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        post['imageUrl'] ?? '',
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Icon(Icons.error),
+                      borderRadius: BorderRadius.circular(16),
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: Image.network(
+                              imageUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => Container(
+                                color: Colors.grey.shade200,
+                                child: Center(child: Icon(Icons.broken_image, color: Colors.grey, size: 40)),
+                              ),
+                            ),
+                          ),
+                          Positioned.fill(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.bottomCenter,
+                                  end: Alignment.topCenter,
+                                  colors: [Colors.black54, Colors.transparent],
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 12,
+                            left: 12,
+                            right: 12,
+                            child: Text(
+                              title,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                shadows: [Shadow(color: Colors.black, blurRadius: 6)],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Positioned(
+                            top: 12,
+                            left: 12,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: category.toLowerCase() == 'lost'
+                                    ? Colors.redAccent.withOpacity(0.9)
+                                    : Colors.green.withOpacity(0.9),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                category,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),

@@ -50,81 +50,24 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     fetchInitialPosts();
   }
-
   Future<void> fetchInitialPosts() async {
     setState(() => isLoading = true);
 
     try {
-      final postsSnapshot = await FirebaseFirestore.instance.collection('posts').get();
+      final postsSnapshotFound = await FirebaseFirestore.instance.collection('foundItems').get();
+      final postsSnapshotLost = await FirebaseFirestore.instance.collection('lostItems').get();
       List<Map<String, dynamic>> items = [];
 
-      for (var doc in postsSnapshot.docs) {
+      // Process Found Items
+      for (var doc in postsSnapshotFound.docs) {
         final data = doc.data();
+        items.add(await _processPostData(doc.id, data, 'found'));
+      }
 
-        if (data.isEmpty) continue;
-
-        final uid = data['uid'] ?? '';
-        String userNameOrEmail = 'Unknown User';
-
-        try {
-          if (uid.isNotEmpty) {
-            final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-            if (userDoc.exists) {
-              userNameOrEmail = userDoc.get('name') ?? userDoc.get('email') ?? 'Unknown User';
-            }
-          }
-        } catch (e) {
-          print('Error fetching user for post ${doc.id}: $e');
-        }
-
-        final Timestamp? dateTimestamp = data['date'];
-        final Timestamp? timeTimestamp = data['time'];
-
-        final formattedDate = dateTimestamp != null
-            ? dateTimestamp.toDate().toString().split(' ')[0]
-            : 'No Date';
-
-        final formattedTime = timeTimestamp != null
-            ? TimeOfDay.fromDateTime(timeTimestamp.toDate()).format(context)
-            : 'No Time';
-
-        final String rawPostType = (data['type'] ?? '').toString().toLowerCase();
-
-        String buttonText = '';
-        if (rawPostType == 'found') {
-          buttonText = 'Found';
-        } else if (rawPostType == 'lost') {
-          buttonText = 'Lost';
-        } else {
-          // fallback to category if type is missing or invalid
-          buttonText = (data['category']?.toString().toLowerCase().contains('found') ?? false)
-              ? 'Found'
-              : 'Lost';
-        }
-
-        final Color buttonColor = buttonText == 'Found' ? Colors.green : Colors.red;
-
-        // Handle latitude and longitude safely
-        final latitude = data['latitude'];
-        final longitude = data['longitude'];
-
-        items.add({
-          'id': doc.id,
-          'title': data['title'] ?? 'No Title',
-          'category': data['category'] ?? 'Unknown',
-          'date': formattedDate,
-          'time': formattedTime,
-          'location': data['location'] ?? '0.0, 0.0',
-          'description': data['description'] ?? '',
-          'images': List<String>.from(data['images'] ?? []),
-          'buttonColor': buttonColor,
-          'buttonText': buttonText,
-          'phoneNumber': data['phoneNumber'] ?? '',
-          'uid': uid,
-          'userName': userNameOrEmail,
-          'latitude': latitude,
-          'longitude': longitude,
-        });
+      // Process Lost Items
+      for (var doc in postsSnapshotLost.docs) {
+        final data = doc.data();
+        items.add(await _processPostData(doc.id, data, 'lost'));
       }
 
       setState(() {
@@ -137,28 +80,54 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => isLoading = false);
     }
   }
-  Stream<QuerySnapshot> getPostsStream() {
-    if (selectedCategory == 'All') {
-      return FirebaseFirestore.instance.collection('posts').snapshots();
-    } else {
-      return FirebaseFirestore.instance
-          .collection('posts')
-          .where('type', isEqualTo: selectedCategory.toLowerCase()) // Use `type`
-          .snapshots();
+
+  Future<Map<String, dynamic>> _processPostData(String docId, Map<String, dynamic> data, String postType) async {
+    final uid = data['uid'] ?? '';
+    String userNameOrEmail = 'Unknown User';
+
+    try {
+      if (uid.isNotEmpty) {
+        final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        if (userDoc.exists) {
+          userNameOrEmail = userDoc.get('name') ?? userDoc.get('email') ?? 'Unknown User';
+        }
+      }
+    } catch (e) {
+      print('Error fetching user for post $docId: $e');
     }
+
+    final Timestamp? dateTimestamp = data['date'];
+    final formattedDate = dateTimestamp != null ? dateTimestamp.toDate().toString().split(' ')[0] : 'No Date';
+    final buttonText = postType == 'found' ? 'Found' : 'Lost';
+    final buttonColor = buttonText == 'Found' ? Colors.green : Colors.red;
+    final latitude = data['latitude'];
+    final longitude = data['longitude'];
+
+    return {
+      'id': docId,
+      'title': data['itemName'] ?? 'No Title',
+      'category': data['category'] ?? 'Unknown',
+      'date': formattedDate,
+      'location': data['location'] ?? '0.0, 0.0',
+      'description': data['description'] ?? '',
+      'images': List<String>.from(data['images'] ?? []),
+      'buttonColor': buttonColor,
+      'buttonText': buttonText,
+      'phoneNumber': data['phoneNumber'] ?? '',
+      'uid': uid,
+      'userName': userNameOrEmail,
+      'latitude': latitude,
+      'longitude': longitude,
+    };
   }
 
   List<Map<String, dynamic>> getFilteredItems() {
     List<Map<String, dynamic>> filteredItems = allItems;
 
-    // Debugging: Print the list before applying filters
-    print('Before filtering, items count: ${filteredItems.length}');
-
     if (selectedCategory != 'All') {
       filteredItems = filteredItems
           .where((item) => item['buttonText'] == selectedCategory)
           .toList();
-      print('After category filter, items count: ${filteredItems.length}');
     }
 
     if (searchQuery.isNotEmpty) {
@@ -167,25 +136,26 @@ class _HomeScreenState extends State<HomeScreen> {
         final category = item['category'].toString().toLowerCase();
         final query = searchQuery.toLowerCase();
 
-        // Debugging: Check how the query matches the data
-        print('Searching for query: "$query" in title: "$title" or category: "$category"');
-
         return title.contains(query) || category.contains(query);
       }).toList();
-      print('After search query filter, items count: ${filteredItems.length}');
     }
-
-    // Debugging: Check final filtered result
-    print('Final filtered items count: ${filteredItems.length}');
 
     return filteredItems;
   }
 
-
-
+  Stream<QuerySnapshot> getPostsStream() {
+    if (selectedCategory == 'All') {
+      return FirebaseFirestore.instance.collection('posts').snapshots();
+    } else {
+      return FirebaseFirestore.instance
+          .collection('posts')
+          .where('type', isEqualTo: selectedCategory.toLowerCase())
+          .snapshots();
+    }
+  }
   void _onItemTapped(int index) {
     setState(() {
-      _selectedIndex = index;  // Now _selectedIndex is defined and updated
+      _selectedIndex = index;
     });
 
     if (index == 1) {
@@ -196,22 +166,28 @@ class _HomeScreenState extends State<HomeScreen> {
     } else if (index == 2) {
       _showAddPostModal(context);
     } else if (index == 3) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Chat feature will be available in future updates!',
-            style: TextStyle(color: Colors.white),
-          ),
-          backgroundColor: Colors.red,
-          duration: Duration(seconds: 2),
-        ),
-      );
+      _showComingSoonMessage(context); // 🔄 Replaced SnackBar with dialog
     } else if (index == 4) {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const ProfileScreen()),
       );
     }
+  }
+  void _showComingSoonMessage(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Coming Soon!'),
+        content: const Text('This feature will be available soon. Stay tuned!'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Okay'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showAddPostModal(BuildContext context) {
